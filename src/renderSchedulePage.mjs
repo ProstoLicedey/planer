@@ -39,9 +39,12 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
     groupNumber: data.groupNumber ?? groupNumber,
     semester: data.semester ?? "autumn",
     yearAssumption: data.yearAssumption ?? year,
+    generatedAt: data.generatedAt ?? null,
+    fetchedFrom: data.fetchedFrom ?? null,
     times,
     weekStarts,
     events,
+    reparseChanges: data.reparseChanges ?? {},
   };
 
   const css = `
@@ -63,137 +66,155 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
     .wrap{
       max-width: 1200px;
       margin: 0 auto;
-      padding: 18px;
+      padding: 14px 16px 18px;
     }
     .top{
+      position: sticky;
+      top: 0;
+      z-index: 40;
       display:flex;
       flex-direction: column;
-      gap: 12px;
-      margin-bottom: 18px;
-      padding: 14px;
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
-      box-shadow: 0 10px 30px rgba(0,0,0,0.16);
+      gap: 8px;
+      margin: -14px -16px 14px;
+      padding: 10px 16px 10px;
+      border: 0;
+      border-bottom: 1px solid var(--border);
+      border-radius: 0;
+      background: rgba(30,30,30,0.96);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.18);
     }
-    .topHeader{
+    .topPrimary{
       display:flex;
-      align-items:flex-start;
-      justify-content:space-between;
-      gap:12px;
-      flex-wrap:wrap;
+      align-items:center;
+      gap: 6px;
+      flex-wrap: wrap;
+      min-width: 0;
     }
-    .topTitle{
+    .brand{
       display:flex;
       flex-direction:column;
-      gap:4px;
-      min-width: 220px;
+      gap:2px;
+      min-width: 0;
+      flex: 0 1 auto;
     }
     .topKicker{
       color: var(--muted);
-      font-size: 12px;
+      font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.04em;
+      line-height: 1.1;
     }
     h1{
-      font-size:18px;
+      font-size:15px;
       margin:0;
+      line-height: 1.2;
+      white-space: nowrap;
     }
-    .topBody{
-      display:flex;
-      gap: 12px;
-      align-items:flex-start;
-      flex-wrap:wrap;
-    }
-    .topSection{
+    .weekPager{
       display:flex;
       align-items:center;
-      gap:10px;
-      flex-wrap:wrap;
+      gap:6px;
       min-width: 0;
-      padding: 12px;
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      background: rgba(255,255,255,0.02);
-      align-self: flex-start;
-    }
-    .topSectionNav{
       flex: 0 1 auto;
-    }
-    .topSectionMain{
-      flex: 1 1 320px;
-      justify-content:flex-start;
-    }
-    .topSectionTools{
-      flex: 1 1 420px;
-      justify-content:flex-start;
-      align-items:flex-start;
-    }
-    .topControlGroup{
-      display:flex;
-      align-items:center;
-      gap:8px;
-      flex-wrap:nowrap;
-      min-width: 0;
-    }
-    .topButtonRow{
-      display:flex;
-      align-items:center;
-      gap:8px;
-      flex-wrap:wrap;
-    }
-    .topButtonCluster{
-      display:grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      column-gap:10px;
-      row-gap:10px;
-      align-items:start;
-      width: 100%;
-    }
-    .weekBadge{
-      display:flex;
-      align-items:center;
-      gap:8px;
-      padding: 8px 10px;
+      padding: 3px;
       border: 1px solid var(--border);
       border-radius: 12px;
       background: rgba(255,255,255,0.03);
-      min-width: 0;
-    }
-    .weekBadgeLabel{
-      color:var(--muted);
-      font-size:12px;
-      line-height:1.1;
     }
     .weekBadgeValue{
       font-weight:700;
-      min-width: 0;
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      padding: 0 4px;
+      min-width: 10.5ch;
+      text-align: center;
     }
-    .utilityGroup{
-      display:flex;
-      flex-direction:column;
-      gap:6px;
-      min-width: 0;
-      width: 100%;
-    }
-    .utilityLabel{
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.1;
-    }
-    .workControls{
+    .topSearch{
+      position: relative;
       display:flex;
       align-items:center;
-      gap:8px;
-      flex-wrap:nowrap;
+      min-width: 0;
+      flex: 0 1 168px;
+      width: 168px;
+      max-width: 168px;
+      height: 34px;
+    }
+    .workBar{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      flex-wrap: nowrap;
+      min-width: 0;
+      height: 38px;
+      padding: 3px 3px 3px 8px;
+      border: 1px solid rgba(76,175,80,0.28);
+      border-radius: 12px;
+      background: rgba(76,175,80,0.08);
+    }
+    .topActions{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      flex: 0 0 auto;
+    }
+    .workBarLabel{
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .workHoursField{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      color: var(--muted);
+      font-size: 12px;
     }
     .workStatus{
       color:var(--muted);
       font-size:13px;
-      width: 100%;
       min-width:0;
-      grid-column: 1 / -1;
-      align-self:start;
+    }
+    .workStatus:empty{
+      display:none;
+    }
+    .menu{
+      position: relative;
+    }
+    .menuList{
+      display:none;
+      position: absolute;
+      right: 0;
+      top: calc(100% + 6px);
+      min-width: 240px;
+      padding: 6px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #2a2a2a;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.35);
+      z-index: 60;
+    }
+    .menu.isOpen .menuList{
+      display:flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .menuItem{
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      color: var(--text);
+      border: 0;
+      border-radius: 8px;
+      padding: 9px 10px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .menuItem:hover,
+    .menuItem:focus-visible{
+      background: rgba(255,255,255,0.06);
+      outline: none;
     }
     label{
       color:var(--muted);
@@ -269,6 +290,11 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
       background: rgba(255,193,7,0.10);
       border-color: rgba(255,193,7,0.55);
     }
+    .cardChanged{
+      background: rgba(56,189,248,0.18);
+      border-color: rgba(56,189,248,0.75);
+      border-left: 3px solid rgba(56,189,248,0.95);
+    }
     .cardTime{
       color: var(--muted);
       font-size: 11px;
@@ -335,6 +361,35 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
       cursor: pointer;
       font-size: 14px;
     }
+    .previousPair{
+      margin: 0;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(56,189,248,0.08);
+    }
+    .previousPairLabel{
+      color: rgba(125,211,252,0.95);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+    .previousPairCard{
+      background: rgba(56,189,248,0.12);
+      border: 1px solid rgba(56,189,248,0.45);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 13px;
+      line-height: 1.25;
+    }
+    .previousPairCard .disc{
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+    .previousPairNote{
+      color: var(--text);
+      font-size: 13px;
+    }
     .modalBody{
       padding: 14px;
       display: grid;
@@ -371,10 +426,11 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
       color: var(--text);
       border: 1px solid var(--border);
       border-radius: 10px;
-      padding: 9px 12px;
+      padding: 7px 11px;
       cursor: pointer;
-      font-size: 14px;
-      min-height: 40px;
+      font-size: 13px;
+      min-height: 34px;
+      white-space: nowrap;
       transition: background 140ms ease, border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
     }
     .btn:hover{
@@ -405,41 +461,58 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
       background: rgba(255,255,255,0.02);
     }
     .btnNav{
-      min-width: 40px;
-      padding-inline: 0;
-      font-size: 16px;
+      min-width: 32px;
+      min-height: 32px;
+      padding: 0;
+      font-size: 18px;
+      line-height: 1;
+      background: transparent;
+      border-color: transparent;
+    }
+    .btnCompact{
+      min-height: 32px;
+      padding: 6px 10px;
     }
 
     /* Top search */
-    .topSearch{
-      display:grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items:stretch;
-      gap:8px;
-      min-width: 0;
-      width: 100%;
-      max-width: 368px;
-    }
     input.searchInput{
       background: var(--panel);
       color: var(--text);
       border:1px solid var(--border);
       border-radius:10px;
-      padding:8px 10px;
+      padding:7px 34px 7px 10px;
       outline:none;
-      font-size:14px;
+      font-size:13px;
       width: 100%;
       min-width: 0;
       max-width: none;
-      min-height: 40px;
+      min-height: 34px;
     }
     .btnIcon{
+      position: absolute;
+      right: 4px;
+      top: 50%;
+      transform: translateY(-50%);
       display:inline-flex;
       align-items:center;
       justify-content:center;
+      width: 26px;
+      height: 26px;
+      min-height: 26px;
+      padding: 0;
       line-height: 1;
-      padding: 9px 12px;
-      align-self:stretch;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      border-radius: 8px;
+    }
+    .btnIcon:hover{
+      background: rgba(255,255,255,0.08);
+      color: var(--text);
+    }
+    input.searchInput:placeholder-shown + .btnIcon{
+      visibility: hidden;
     }
     .highlight{
       background: rgba(76,175,80,0.18);
@@ -456,12 +529,12 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
       background: var(--panel);
       color: var(--text);
       border:1px solid var(--border);
-      border-radius:10px;
-      padding:8px 10px;
+      border-radius:8px;
+      padding:6px 8px;
       outline:none;
-      font-size:14px;
-      width: 88px;
-      min-height: 40px;
+      font-size:13px;
+      width: 56px;
+      min-height: 32px;
     }
     input.searchInput:focus-visible,
     input.workInput:focus-visible,
@@ -469,55 +542,42 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
       border-color: rgba(76,175,80,0.72);
       box-shadow: 0 0 0 3px rgba(76,175,80,0.18);
     }
-    @media (max-width: 980px){
-      .topBody{
-        flex-direction: column;
-      }
-      .topSectionNav,
-      .topSectionMain,
-      .topSectionTools{
-        width: 100%;
-      }
-      .topSectionMain,
-      .topSectionTools{
-        justify-content:flex-start;
-      }
-      .topButtonCluster{
-        grid-template-columns: 1fr;
-      }
-      .topControlGroup,
-      .workControls{
-        flex-wrap: wrap;
-      }
-      .workStatus{
-        min-width: 0;
+    @media (min-width: 900px){
+      .topPrimary{
+        flex-wrap: nowrap;
       }
     }
-    @media (max-width: 640px){
+    @media (max-width: 899px){
+      .topSearch{
+        flex: 1 1 140px;
+        width: auto;
+        max-width: none;
+      }
+      .workBar{
+        flex-wrap: wrap;
+      }
+    }
+    @media (max-width: 720px){
       .top{
-        padding: 12px;
+        padding: 10px 12px;
+        margin: -14px -16px 12px;
       }
-      .topSection{
-        padding: 10px;
+      h1{
+        white-space: normal;
       }
-      .topButtonRow,
-      .topButtonCluster,
-      .workControls{
-        width: 100%;
+      .weekPager,
+      .topSearch,
+      .workBar,
+      .topActions{
+        flex: 1 1 100%;
+        max-width: none;
       }
-      .topButtonRow .btn,
-      .topButtonCluster .btn{
-        flex: 1 1 auto;
-      }
-      .weekBadge{
-        width: 100%;
+      .weekPager{
         justify-content: space-between;
       }
-      .topSearch{
-        width: 100%;
-      }
-      input.searchInput{
-        max-width: none;
+      .topActions .btnPrimary,
+      .workBar .btn{
+        flex: 1 1 auto;
       }
     }
   `;
@@ -533,52 +593,41 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
 <body>
   <div class="wrap">
     <div class="top">
-      <div class="topHeader">
-        <div class="topTitle">
-          <div class="topKicker">Планировщик семестра</div>
-          <h1>расписание · группа ${groupNumber}</h1>
+      <div class="topPrimary">
+        <div class="brand">
+          <div class="topKicker">Планировщик</div>
+          <h1>Группа ${groupNumber}</h1>
+        </div>
+        <div class="weekPager" role="group" aria-label="Неделя">
+          <button class="btn btnNav" id="prevWeekBtn" type="button" aria-label="Предыдущая неделя">‹</button>
+          <div class="weekBadgeValue" id="weekTitle"></div>
+          <button class="btn btnNav" id="nextWeekBtn" type="button" aria-label="Следующая неделя">›</button>
+        </div>
+        <div class="topSearch">
+          <input id="searchInput" class="searchInput" type="text" placeholder="Поиск..." autocomplete="off"/>
+          <button class="btnIcon" id="clearSearchBtn" type="button" aria-label="Очистить поиск">×</button>
+        </div>
+        <div class="workBar">
+          <label class="workHoursField" for="workTargetHours">
+            <input id="workTargetHours" class="workInput" type="number" min="0" step="0.5" value="30"/>
+            <span>ч/нед</span>
+          </label>
+          <button class="btn btnPrimary btnCompact" id="calcWorkBtn" type="button">Рассчитать</button>
+          <button class="btn btnSubtle btnCompact" id="clearWorkBtn" type="button">Очистить</button>
+        </div>
+        <div class="topActions">
+          <button class="btn btnPrimary" id="addEventBtn" type="button">+ Добавить</button>
+          <div class="menu" id="moreMenu">
+            <button class="btn btnSubtle" id="moreMenuBtn" type="button" aria-haspopup="menu" aria-expanded="false">Ещё</button>
+            <div class="menuList" role="menu">
+              <button class="menuItem" id="googleCalendarBtn" type="button" role="menuitem">Экспорт в Google Calendar</button>
+              <button class="menuItem" id="exportBtn" type="button" role="menuitem">Скачать JSON</button>
+              <button class="menuItem" id="reparseBtn" type="button" role="menuitem">Перепарсить расписание</button>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="topBody">
-        <section class="topSection topSectionNav">
-          <div class="topControlGroup">
-            <button class="btn btnNav" id="prevWeekBtn" type="button" aria-label="Предыдущая неделя">←</button>
-            <div class="weekBadge">
-              <div class="weekBadgeLabel">Неделя</div>
-              <div class="weekBadgeValue" id="weekTitle"></div>
-            </div>
-            <button class="btn btnNav" id="nextWeekBtn" type="button" aria-label="Следующая неделя">→</button>
-          </div>
-        </section>
-        <section class="topSection topSectionMain">
-          <div class="topButtonRow">
-            <button class="btn btnPrimary" id="addEventBtn" type="button">Добавить мероприятие</button>
-            <button class="btn btnSubtle" id="googleCalendarBtn" type="button">Экспорт в Google Calendar</button>
-            <button class="btn btnSubtle" id="exportBtn" type="button">Скачать JSON</button>
-            <button class="btn btnSubtle" id="reparseBtn" type="button">Перепарсить расписание</button>
-          </div>
-        </section>
-        <section class="topSection topSectionTools">
-          <div class="topButtonCluster">
-            <div class="utilityGroup">
-              <label class="utilityLabel" for="searchInput">Поиск</label>
-              <div class="topSearch">
-                <input id="searchInput" class="searchInput" type="text" placeholder="Дисциплина..."/>
-                <button class="btn btnIcon btnSubtle" id="clearSearchBtn" type="button" aria-label="Очистить поиск">×</button>
-              </div>
-            </div>
-            <div class="utilityGroup">
-              <label class="utilityLabel" for="workTargetHours">Часы/нед</label>
-              <div class="workControls">
-                <input id="workTargetHours" class="workInput" type="number" min="0" step="0.5" value="30"/>
-                <button class="btn" id="calcWorkBtn" type="button">Рассчитать рабочие часы</button>
-                <button class="btn btnSubtle" id="clearWorkBtn" type="button">Очистить работу</button>
-              </div>
-            </div>
-            <div id="workCalcStatus" class="workStatus"></div>
-          </div>
-        </section>
-      </div>
+      <div id="workCalcStatus" class="workStatus"></div>
     </div>
 
     <div id="grid"></div>
@@ -588,6 +637,15 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
         <div class="modalHeader">
           <strong>Редактирование события</strong>
           <button type="button" id="editCloseBtn" aria-label="Закрыть">×</button>
+        </div>
+        <div id="editPrevious" class="previousPair" style="display:none;">
+          <div class="previousPairLabel" id="editPreviousLabel">Старый формат</div>
+          <div class="previousPairCard" id="editPreviousCard">
+            <div class="cardTime" id="editPreviousTime"></div>
+            <div class="disc" id="editPreviousDisc"></div>
+            <div class="meta" id="editPreviousMeta"></div>
+          </div>
+          <div class="previousPairNote" id="editPreviousNote" style="display:none;"></div>
         </div>
 
         <div class="modalBody">
@@ -743,8 +801,12 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
     const RAW_SCHEDULE = ${JSON.stringify(scheduleForHtml)};
     const DAY_NAMES = ${JSON.stringify(dayNamesRu())};
 
+    const reparseChanges = RAW_SCHEDULE.reparseChanges && typeof RAW_SCHEDULE.reparseChanges === 'object'
+      ? RAW_SCHEDULE.reparseChanges
+      : {};
+
     const STORAGE_KEY =
-      'kai-schedule-edits:' + RAW_SCHEDULE.groupNumber + ':' + RAW_SCHEDULE.yearAssumption + ':' + RAW_SCHEDULE.semester;
+      'kai-schedule-edits:' + RAW_SCHEDULE.groupNumber + ':' + RAW_SCHEDULE.yearAssumption + ':' + RAW_SCHEDULE.semester + ':' + (RAW_SCHEDULE.generatedAt || '');
 
     const times = RAW_SCHEDULE.times ?? [];
     const weekStarts = RAW_SCHEDULE.weekStarts ?? [];
@@ -765,6 +827,21 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
     function isPhysicalEducationEvent(ev) {
       const title = String(ev?.discipline || '').toLowerCase();
       return title.includes('физическая культура');
+    }
+
+    function getReparseChange(ev) {
+      if (!ev) return null;
+      const direct = ev.reparseChange;
+      if (direct && typeof direct === 'object') return direct;
+      return reparseChanges[ev.eventId] || reparseChanges[String(ev.eventId)] || null;
+    }
+
+    function pairMetaText(ev) {
+      const metaParts = [];
+      if (ev?.lessonType && ev.department !== DEPARTMENT.GENERATED_WORK) metaParts.push(ev.lessonType);
+      if (ev?.room) metaParts.push(ev.room);
+      if (ev?.teacher) metaParts.push(ev.teacher);
+      return metaParts.join(' · ');
     }
 
     let events = Array.isArray(RAW_SCHEDULE.events)
@@ -950,7 +1027,9 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
       ':' +
       RAW_SCHEDULE.yearAssumption +
       ':' +
-      RAW_SCHEDULE.semester;
+      RAW_SCHEDULE.semester +
+      ':' +
+      (RAW_SCHEDULE.generatedAt || '');
 
     let deletedKaiEventIds = new Set();
 
@@ -1157,11 +1236,55 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
       if (teacherField) teacherField.style.display = isPair ? 'flex' : 'none';
     }
 
+    function fillPreviousPair(change) {
+      const wrap = document.getElementById('editPrevious');
+      const labelEl = document.getElementById('editPreviousLabel');
+      const cardEl = document.getElementById('editPreviousCard');
+      const noteEl = document.getElementById('editPreviousNote');
+      const timeEl = document.getElementById('editPreviousTime');
+      const discEl = document.getElementById('editPreviousDisc');
+      const metaEl = document.getElementById('editPreviousMeta');
+      if (!wrap) return;
+
+      if (!change) {
+        wrap.style.display = 'none';
+        return;
+      }
+
+      wrap.style.display = 'block';
+
+      if (change.kind === 'added' || !change.previous) {
+        if (labelEl) labelEl.textContent = 'После перепарса';
+        if (cardEl) cardEl.style.display = 'none';
+        if (noteEl) {
+          noteEl.style.display = 'block';
+          noteEl.textContent = 'Новая пара — раньше в этом слоте её не было.';
+        }
+        return;
+      }
+
+      const prev = change.previous;
+      if (labelEl) labelEl.textContent = 'Старый формат';
+      if (cardEl) cardEl.style.display = 'block';
+      if (noteEl) {
+        noteEl.style.display = 'none';
+        noteEl.textContent = '';
+      }
+      if (timeEl) {
+        const datePart = prev.dateLabel || (prev.isoDate ? formatDDMM(prev.isoDate) : '');
+        const timeRange = (prev.time || '') + (eventEndTime(prev) ? ' - ' + eventEndTime(prev) : '');
+        timeEl.textContent = [datePart, timeRange].filter(Boolean).join(' · ');
+      }
+      if (discEl) discEl.textContent = prev.discipline || '';
+      if (metaEl) metaEl.textContent = pairMetaText(prev);
+    }
+
     function openEditor(eventId, days) {
       const ev = events.find((x) => x.eventId === eventId);
       if (!ev) return;
       editingEventId = eventId;
       editingDays = days;
+      fillPreviousPair(getReparseChange(ev));
 
       const dateSel = document.getElementById('editDate');
       const timeSel = document.getElementById('editTime');
@@ -1597,15 +1720,21 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
             if (e.department === DEPARTMENT.FIXED_IT_SCHOOL) card.classList.add('cardItSchool');
             if (e.lessonType === LESSON_TYPE.PAIR) card.classList.add('cardPair');
             if (e.lessonType === LESSON_TYPE.NONPAIR) card.classList.add('cardNonPair');
+            const reparseChange = getReparseChange(e);
+            if (reparseChange) card.classList.add('cardChanged');
             const isUser = e.source === 'user';
             const isProtected = isProtectedUserEvent(e);
             const canEdit = !isProtected;
             card.style.cursor = canEdit ? 'pointer' : 'default';
             card.title = isProtected
               ? 'Служебное событие'
-              : isUser
-                ? 'Клик: редактировать/удалить'
-                : 'Клик: редактировать';
+              : reparseChange?.kind === 'changed'
+                ? 'Изменилась после перепарса. Клик: старый формат'
+                : reparseChange?.kind === 'added'
+                  ? 'Новая пара после перепарса'
+                  : isUser
+                    ? 'Клик: редактировать/удалить'
+                    : 'Клик: редактировать';
             const startMinutes = parseTimeToMinutes(e.time) ?? parseTimeToMinutes(t) ?? 0;
             const baseMinutes = parseTimeToMinutes(t) ?? 0;
             const offsetMinutes = Math.max(0, startMinutes - baseMinutes);
@@ -1627,13 +1756,7 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
 
             const meta = document.createElement('div');
             meta.className = 'meta';
-            const metaParts = [];
-            // Для служебной "РАБОТА" тип фактически дублируется в названии дисциплины.
-            // Поэтому не добавляем lessonType в meta-строку.
-            if (e.lessonType && e.department !== DEPARTMENT.GENERATED_WORK) metaParts.push(e.lessonType);
-            if (e.room) metaParts.push(e.room);
-            if (e.teacher) metaParts.push(e.teacher);
-            meta.textContent = metaParts.join(' · ');
+            meta.textContent = pairMetaText(e);
 
             card.appendChild(timeLine);
             card.appendChild(disc);
@@ -1685,6 +1808,27 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
           searchInputEl.focus();
         });
       }
+    }
+
+    const moreMenu = document.getElementById('moreMenu');
+    const moreMenuBtn = document.getElementById('moreMenuBtn');
+    if (moreMenu && moreMenuBtn) {
+      const setOpen = (open) => {
+        moreMenu.classList.toggle('isOpen', open);
+        moreMenuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      };
+      moreMenuBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        setOpen(!moreMenu.classList.contains('isOpen'));
+      });
+      moreMenu.addEventListener('click', (ev) => ev.stopPropagation());
+      moreMenu.querySelectorAll('.menuItem').forEach((item) => {
+        item.addEventListener('click', () => setOpen(false));
+      });
+      document.addEventListener('click', () => setOpen(false));
+      document.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Escape') setOpen(false);
+      });
     }
 
     // ---- Google Calendar export (.ics) ----
@@ -1924,6 +2068,7 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
     }
 
     // Initial load: user events + generated work events.
+    if (currentWeekStartIso) renderWeek(currentWeekStartIso);
     const initialLoadPromise = (async () => {
       await loadUserEvents();
       await loadWorkEvents();

@@ -32,6 +32,86 @@ function getWeekdayRuShortFromIso(isoDate) {
   return { mondayIndex, name: names[mondayIndex] };
 }
 
+function normField(value) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function identityKey(event) {
+  return [event?.isoDate, event?.time, normField(event?.discipline)].join('|');
+}
+
+function slotKey(event) {
+  return [event?.isoDate, event?.time].join('|');
+}
+
+function contentSignature(event) {
+  return ['discipline', 'lessonType', 'room', 'teacher', 'department']
+    .map((key) => normField(event?.[key]))
+    .join('|');
+}
+
+function snapshotEvent(event) {
+  return {
+    isoDate: event?.isoDate || '',
+    dateLabel: event?.dateLabel || '',
+    time: event?.time || '',
+    discipline: event?.discipline || '',
+    lessonType: event?.lessonType || '',
+    room: event?.room || '',
+    teacher: event?.teacher || '',
+    department: event?.department || '',
+  };
+}
+
+function takeUnused(list, used) {
+  if (!list) return null;
+  const found = list.find((event) => !used.has(event));
+  if (!found) return null;
+  used.add(found);
+  return found;
+}
+
+export function diffScheduleEvents(previousEvents, nextEvents) {
+  const prev = Array.isArray(previousEvents) ? previousEvents : [];
+  const next = Array.isArray(nextEvents) ? nextEvents : [];
+  if (!prev.length) return {};
+
+  const used = new Set();
+  const byIdentity = new Map();
+  const bySlot = new Map();
+
+  for (const event of prev) {
+    const ik = identityKey(event);
+    if (!byIdentity.has(ik)) byIdentity.set(ik, []);
+    byIdentity.get(ik).push(event);
+
+    const sk = slotKey(event);
+    if (!bySlot.has(sk)) bySlot.set(sk, []);
+    bySlot.get(sk).push(event);
+  }
+
+  const changes = {};
+  for (const neu of next) {
+    const exact = takeUnused(byIdentity.get(identityKey(neu)), used);
+    if (exact) {
+      if (contentSignature(exact) !== contentSignature(neu)) {
+        changes[neu.eventId] = { kind: 'changed', previous: snapshotEvent(exact) };
+      }
+      continue;
+    }
+
+    const slotted = takeUnused(bySlot.get(slotKey(neu)), used);
+    if (slotted) {
+      changes[neu.eventId] = { kind: 'changed', previous: snapshotEvent(slotted) };
+      continue;
+    }
+
+    changes[neu.eventId] = { kind: 'added', previous: null };
+  }
+
+  return changes;
+}
+
 export async function buildEvents({ groupNumber = '4319', year = 2026 } = {}) {
   const outDir = path.resolve(process.cwd(), 'out');
   const rawPath = path.join(outDir, `schedule-${groupNumber}-autumn-${year}.raw.json`);
@@ -39,6 +119,14 @@ export async function buildEvents({ groupNumber = '4319', year = 2026 } = {}) {
 
   const raw = JSON.parse(await fs.readFile(rawPath, 'utf-8'));
   const rows = raw.rows ?? [];
+
+  let previousEvents = [];
+  try {
+    const previousData = JSON.parse(await fs.readFile(outEventsPath, 'utf-8'));
+    previousEvents = Array.isArray(previousData.events) ? previousData.events : [];
+  } catch {
+    previousEvents = [];
+  }
 
   const events = [];
 
@@ -103,6 +191,8 @@ export async function buildEvents({ groupNumber = '4319', year = 2026 } = {}) {
     .filter(Boolean)
     .sort((a, b) => (parseTimeToMinutes(a) ?? 0) - (parseTimeToMinutes(b) ?? 0));
 
+  const reparseChanges = diffScheduleEvents(previousEvents, eventsDeduped);
+
   const payload = {
     groupNumber,
     semester: 'autumn',
@@ -111,6 +201,7 @@ export async function buildEvents({ groupNumber = '4319', year = 2026 } = {}) {
     generatedAt: new Date().toISOString(),
     times,
     events: eventsDeduped,
+    reparseChanges,
   };
 
   await fs.writeFile(outEventsPath, JSON.stringify(payload, null, 2), 'utf-8');

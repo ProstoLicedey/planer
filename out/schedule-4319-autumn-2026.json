@@ -3,7 +3,7 @@
   "semester": "autumn",
   "yearAssumption": 2026,
   "fetchedFrom": "2026-08-23T20:00:48.891Z",
-  "generatedAt": "2026-08-23T20:00:48.905Z",
+  "generatedAt": "2026-08-23T20:35:36.817Z",
   "times": [
     "08:00",
     "09:40",
@@ -7647,5 +7647,6 @@
       ],
       "eventId": 233
     }
-  ]
+  ],
+  "reparseChanges": {}
 }

@@ -602,12 +602,21 @@
             <label for="editDate">Дата</label>
             <select id="editDate"></select>
           </div>
-          <div class="field">
-            <label for="editTime">Время</label>
-            <select id="editTime"></select>
+          <div class="field" id="editTimeSelectField">
+            <label for="editTimeSelect">Время</label>
+            <select id="editTimeSelect"></select>
+          </div>
+          <div class="field" id="editTimeInputField" style="display:none;">
+            <label for="editTimeInput">Время</label>
+            <input id="editTimeInput" type="time"/>
           </div>
 
           <div class="field">
+            <label for="editEndTime">До</label>
+            <input id="editEndTime" type="time"/>
+          </div>
+
+          <div class="field" style="grid-column: 1 / span 2;">
             <label for="editDiscipline">Дисциплина</label>
             <input id="editDiscipline" type="text"/>
           </div>
@@ -624,6 +633,11 @@
                 НЕ ПАРА
               </label>
             </div>
+          </div>
+
+          <div class="field" id="editLessonTypeField">
+            <label for="editLessonType">Формат</label>
+            <input id="editLessonType" type="text" placeholder="лек / пр / л.р."/>
           </div>
 
           <div class="field" id="editRoomField">
@@ -770,6 +784,12 @@
       NONPAIR: 'НЕ ПАРА',
       WORK: 'РАБОТА',
     };
+
+    function isPairLike(ev) {
+      const t = String(ev?.lessonType || '').trim();
+      if (t === LESSON_TYPE.NONPAIR || t === LESSON_TYPE.WORK) return false;
+      return true;
+    }
 
     const WORK_DISCIPLINE = 'Работа';
 
@@ -1180,9 +1200,37 @@
 
       const roomField = document.getElementById('editRoomField');
       const teacherField = document.getElementById('editTeacherField');
+      const lessonTypeField = document.getElementById('editLessonTypeField');
+      const timeSelectField = document.getElementById('editTimeSelectField');
+      const timeInputField = document.getElementById('editTimeInputField');
 
       if (roomField) roomField.style.display = isPair ? 'flex' : 'none';
       if (teacherField) teacherField.style.display = isPair ? 'flex' : 'none';
+      if (lessonTypeField) lessonTypeField.style.display = isPair ? 'flex' : 'none';
+      if (timeSelectField) timeSelectField.style.display = isPair ? 'flex' : 'none';
+      if (timeInputField) timeInputField.style.display = isPair ? 'none' : 'flex';
+
+      const timeSel = document.getElementById('editTimeSelect');
+      const timeInput = document.getElementById('editTimeInput');
+      if (isPair && timeSel && timeInput?.value) {
+        if (![...timeSel.options].some((opt) => opt.value === timeInput.value)) {
+          const opt = document.createElement('option');
+          opt.value = timeInput.value;
+          opt.textContent = timeInput.value;
+          timeSel.appendChild(opt);
+        }
+        timeSel.value = timeInput.value;
+      }
+      if (!isPair && timeInput && timeSel?.value) {
+        timeInput.value = timeSel.value;
+      }
+    }
+
+    function getEditStartTime() {
+      const kind = editOverlay?.querySelector('input[name="editKind"]:checked')?.value || 'pair';
+      return kind === 'pair'
+        ? document.getElementById('editTimeSelect')?.value
+        : document.getElementById('editTimeInput')?.value;
     }
 
     function fillPreviousPair(change) {
@@ -1236,45 +1284,64 @@
       fillPreviousPair(getReparseChange(ev));
 
       const dateSel = document.getElementById('editDate');
-      const timeSel = document.getElementById('editTime');
+      const timeSel = document.getElementById('editTimeSelect');
+      const timeInput = document.getElementById('editTimeInput');
+      const endInput = document.getElementById('editEndTime');
 
       dateSel.innerHTML = '';
-      for (const iso of days) {
+      const dateOptions = addDateOptions.length ? addDateOptions : (days || []);
+      for (const iso of dateOptions) {
         const opt = document.createElement('option');
         opt.value = iso;
         opt.textContent = formatDDMM(iso);
         dateSel.appendChild(opt);
       }
+      if (ev.isoDate && !dateOptions.includes(ev.isoDate)) {
+        const opt = document.createElement('option');
+        opt.value = ev.isoDate;
+        opt.textContent = ev.dateLabel || formatDDMM(ev.isoDate);
+        dateSel.appendChild(opt);
+      }
       dateSel.value = ev.isoDate;
 
-      timeSel.innerHTML = '';
-      for (const t of times) {
-        const opt = document.createElement('option');
-        opt.value = t;
-        opt.textContent = t;
-        timeSel.appendChild(opt);
-      }
-
-      // If user-added event time isn't in times, ensure it exists as an option.
       const evTime = ev.time ? String(ev.time) : '';
-      if (evTime && !times.includes(evTime)) {
-        const opt = document.createElement('option');
-        opt.value = evTime;
-        opt.textContent = evTime;
-        timeSel.appendChild(opt);
+      if (timeSel) {
+        timeSel.innerHTML = '';
+        for (const t of times) {
+          const opt = document.createElement('option');
+          opt.value = t;
+          opt.textContent = t;
+          timeSel.appendChild(opt);
+        }
+        if (evTime && !times.includes(evTime)) {
+          const opt = document.createElement('option');
+          opt.value = evTime;
+          opt.textContent = evTime;
+          timeSel.appendChild(opt);
+        }
+        timeSel.value = evTime || times[0] || '';
       }
-      timeSel.value = evTime || times[0] || '';
+      if (timeInput) timeInput.value = evTime || times[0] || '08:00';
+      if (endInput) endInput.value = eventEndTime(ev) || addMinutesToTime(evTime || times[0] || '08:00', 90);
 
       document.getElementById('editDiscipline').value = ev.discipline || '';
       document.getElementById('editRoom').value = ev.room || '';
       document.getElementById('editTeacher').value = ev.teacher || '';
       document.getElementById('editDepartment').value = ev.department || '';
 
-      const evKind = ev.lessonType === LESSON_TYPE.PAIR ? 'pair' : 'nonpair';
+      const evKind = isPairLike(ev) ? 'pair' : 'nonpair';
       const pairRadio = editOverlay.querySelector('input[name="editKind"][value="pair"]');
       const nonpairRadio = editOverlay.querySelector('input[name="editKind"][value="nonpair"]');
       if (pairRadio) pairRadio.checked = evKind === 'pair';
       if (nonpairRadio) nonpairRadio.checked = evKind === 'nonpair';
+
+      const lessonTypeInput = document.getElementById('editLessonType');
+      if (lessonTypeInput) {
+        lessonTypeInput.value = evKind === 'pair' && ev.lessonType && ev.lessonType !== LESSON_TYPE.PAIR
+          ? ev.lessonType
+          : '';
+      }
+
       syncEditKindFields();
 
       if (editDeleteBtn) editDeleteBtn.disabled = !!isProtectedUserEvent(ev);
@@ -1286,7 +1353,8 @@
       if (!ev) return;
 
       const newIsoDate = document.getElementById('editDate').value;
-      const newTime = document.getElementById('editTime').value;
+      const newTime = getEditStartTime();
+      const newEndTime = document.getElementById('editEndTime')?.value;
 
       ev.isoDate = newIsoDate;
       ev.dateLabel = formatDDMM(newIsoDate);
@@ -1294,9 +1362,19 @@
       ev.timeHour = parseTimeToHour(newTime);
       ev.discipline = document.getElementById('editDiscipline').value;
 
+      const startM = parseTimeToMinutes(newTime);
+      const endM = parseTimeToMinutes(newEndTime);
+      const duration = startM !== null && endM !== null ? endM - startM : eventDurationMinutes(ev);
+      ev.durationMin = duration > 0 ? duration : 90;
+
       const kind = editOverlay.querySelector('input[name="editKind"]:checked')?.value || 'pair';
       const isPair = kind === 'pair';
-      ev.lessonType = isPair ? LESSON_TYPE.PAIR : LESSON_TYPE.NONPAIR;
+      const typedLesson = (document.getElementById('editLessonType')?.value || '').trim();
+      if (isPair) {
+        ev.lessonType = typedLesson || LESSON_TYPE.PAIR;
+      } else {
+        ev.lessonType = LESSON_TYPE.NONPAIR;
+      }
 
       ev.room = isPair ? document.getElementById('editRoom').value : '';
       ev.teacher = isPair ? document.getElementById('editTeacher').value : '';
@@ -1339,6 +1417,18 @@
     if (editOverlay) {
       const radios = editOverlay.querySelectorAll('input[name="editKind"]');
       radios.forEach((r) => r.addEventListener('change', syncEditKindFields));
+
+      const editTimeSelectEl = document.getElementById('editTimeSelect');
+      const editTimeInputEl = document.getElementById('editTimeInput');
+      const editEndTimeEl = document.getElementById('editEndTime');
+      const syncEditEndTimeFromStart = () => {
+        if (!editEndTimeEl) return;
+        const startVal = getEditStartTime();
+        if (!startVal) return;
+        editEndTimeEl.value = addMinutesToTime(startVal, 90);
+      };
+      if (editTimeSelectEl) editTimeSelectEl.addEventListener('change', syncEditEndTimeFromStart);
+      if (editTimeInputEl) editTimeInputEl.addEventListener('change', syncEditEndTimeFromStart);
     }
     if (editOverlay) {
       editOverlay.addEventListener('click', (e) => {

@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { getArgValue } from './cliArgs.mjs';
+import { getArgValue, isMainModule } from './cliArgs.mjs';
 
 function parseTimeToMinutes(time) {
   const m = /^(\d{1,2}):(\d{2})$/.exec(time);
@@ -32,10 +32,7 @@ function getWeekdayRuShortFromIso(isoDate) {
   return { mondayIndex, name: names[mondayIndex] };
 }
 
-async function main() {
-  const groupNumber = getArgValue('--group', '4319');
-  const year = Number(getArgValue('--year', '2026'));
-
+export async function buildEvents({ groupNumber = '4319', year = 2026 } = {}) {
   const outDir = path.resolve(process.cwd(), 'out');
   const rawPath = path.join(outDir, `schedule-${groupNumber}-autumn-${year}.raw.json`);
   const outEventsPath = path.join(outDir, `schedule-${groupNumber}-autumn-${year}.json`);
@@ -117,11 +114,20 @@ async function main() {
   };
 
   await fs.writeFile(outEventsPath, JSON.stringify(payload, null, 2), 'utf-8');
-  console.log(`Saved events: ${outEventsPath}`);
+  return { ...payload, outEventsPath };
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+async function main() {
+  const groupNumber = getArgValue('--group', '4319');
+  const year = Number(getArgValue('--year', '2026'));
+  const result = await buildEvents({ groupNumber, year });
+  console.log(`Saved events: ${result.outEventsPath}`);
+}
+
+if (isMainModule(import.meta.url)) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
 

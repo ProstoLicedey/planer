@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { getArgValue } from './cliArgs.mjs';
+import { getArgValue, isMainModule } from './cliArgs.mjs';
 
 function isoMondayStart(isoDate) {
   const dt = new Date(isoDate + "T00:00:00Z");
@@ -15,9 +15,7 @@ function dayNamesRu() {
   return ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 }
 
-async function main() {
-  const groupNumber = getArgValue("--group", "4319");
-  const year = Number(getArgValue("--year", "2026"));
+export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } = {}) {
 
   const outDir = path.resolve(process.cwd(), "out");
   const inEventsPath = path.join(
@@ -557,6 +555,7 @@ async function main() {
             <button class="btn btnPrimary" id="addEventBtn" type="button">Добавить мероприятие</button>
             <button class="btn btnSubtle" id="googleCalendarBtn" type="button">Экспорт в Google Calendar</button>
             <button class="btn btnSubtle" id="exportBtn" type="button">Скачать JSON</button>
+            <button class="btn btnSubtle" id="reparseBtn" type="button">Перепарсить расписание</button>
           </div>
         </section>
         <section class="topSection topSectionTools">
@@ -1992,6 +1991,34 @@ async function main() {
       });
     }
 
+    const reparseBtn = document.getElementById('reparseBtn');
+    if (reparseBtn) {
+      reparseBtn.addEventListener('click', async () => {
+        const originalLabel = reparseBtn.textContent;
+        reparseBtn.disabled = true;
+        reparseBtn.textContent = 'Обновляю...';
+        try {
+          const resp = await fetch('/api/reparse', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              group: RAW_SCHEDULE.groupNumber,
+              year: RAW_SCHEDULE.yearAssumption,
+            }),
+          });
+          const data = await resp.json().catch(() => ({}));
+          if (!resp.ok) {
+            throw new Error(data.error || 'Не удалось перепарсить расписание');
+          }
+          location.reload();
+        } catch (e) {
+          reparseBtn.disabled = false;
+          reparseBtn.textContent = originalLabel;
+          alert(e?.message || String(e));
+        }
+      });
+    }
+
     // ---- Work hours (generated) ----
     const calcWorkBtn = document.getElementById('calcWorkBtn');
     const clearWorkBtn = document.getElementById('clearWorkBtn');
@@ -2356,10 +2383,19 @@ async function main() {
 </html>`;
 
   await fs.writeFile(outHtmlPath, html, "utf-8");
-  console.log(`Saved HTML: ${outHtmlPath}`);
+  return { outHtmlPath, groupNumber, year };
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+async function main() {
+  const groupNumber = getArgValue("--group", "4319");
+  const year = Number(getArgValue("--year", "2026"));
+  const result = await renderSchedulePage({ groupNumber, year });
+  console.log(`Saved HTML: ${result.outHtmlPath}`);
+}
+
+if (isMainModule(import.meta.url)) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

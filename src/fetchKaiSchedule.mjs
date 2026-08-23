@@ -1,194 +1,129 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { chromium } from 'playwright';
 
-import { getArgValue } from './cliArgs.mjs';
+import { getArgValue, isMainModule } from './cliArgs.mjs';
 
-async function main() {
-  const groupNumber = getArgValue('--group', '4319');
-  const year = Number(getArgValue('--year', '2026'));
+const KAI_SCHEDULE_PAGE = 'https://kai.ru/web/studentu/raspisanie1';
+const KAI_PORTLET_ID = 'pubStudentSchedule_WAR_publicStudentSchedule10';
+const KAI_GROUP_ID_PARAM = `_${KAI_PORTLET_ID}_groupId`;
 
+function cleanText(value) {
+  return String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function parseDates(dayDate) {
+  return Array.from(String(dayDate || '').matchAll(/(\d{2}\.\d{2})/g)).map((m) => m[1]);
+}
+
+function kaiResourceUrl(resourceId, extra = {}) {
+  const url = new URL(KAI_SCHEDULE_PAGE);
+  url.searchParams.set('p_p_id', KAI_PORTLET_ID);
+  url.searchParams.set('p_p_lifecycle', '2');
+  url.searchParams.set('p_p_state', 'normal');
+  url.searchParams.set('p_p_mode', 'view');
+  url.searchParams.set('p_p_resource_id', resourceId);
+  url.searchParams.set('p_p_cacheability', 'cacheLevelPage');
+  for (const [key, value] of Object.entries(extra)) {
+    url.searchParams.set(key, String(value));
+  }
+  return url;
+}
+
+async function fetchKaiJson(url) {
+  const resp = await fetch(url, {
+    headers: {
+      Accept: 'application/json, text/javascript, */*; q=0.1',
+      'User-Agent': 'Mozilla/5.0',
+    },
+  });
+  if (!resp.ok) {
+    throw new Error(`KAI request failed: ${resp.status} ${resp.statusText}`);
+  }
+  const text = await resp.text();
+  if (!text.trim()) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error('KAI returned a non-JSON response');
+  }
+}
+
+async function resolveGroupId(groupNumber) {
+  const url = kaiResourceUrl('getGroupsURL', { query: String(groupNumber) });
+  const data = await fetchKaiJson(url);
+  const groups = Array.isArray(data) ? data : [];
+  const match = groups.find((g) => String(g?.group) === String(groupNumber));
+  if (!match?.id) {
+    throw new Error(`Группа ${groupNumber} не найдена на kai.ru`);
+  }
+  return match.id;
+}
+
+function lessonToRow(lesson) {
+  const building = cleanText(lesson?.buildNum);
+  const audience = cleanText(lesson?.audNum);
+  return {
+    time: cleanText(lesson?.dayTime),
+    dates: parseDates(lesson?.dayDate),
+    discipline: cleanText(lesson?.disciplName),
+    lessonType: cleanText(lesson?.disciplType),
+    room: [building, audience].filter(Boolean).join(' / '),
+    teacher: cleanText(lesson?.prepodName),
+    department: cleanText(lesson?.orgUnitName),
+  };
+}
+
+function rowsFromSchedule(schedule) {
+  if (!schedule || typeof schedule !== 'object') return [];
+  const rows = [];
+  for (const lessons of Object.values(schedule)) {
+    if (!Array.isArray(lessons)) continue;
+    for (const lesson of lessons) {
+      const row = lessonToRow(lesson);
+      if (!row.time || !row.dates.length) continue;
+      rows.push(row);
+    }
+  }
+  return rows;
+}
+
+export async function fetchKaiSchedule({ groupNumber = '4319', year = 2026 } = {}) {
   const outDir = path.resolve(process.cwd(), 'out');
   await fs.mkdir(outDir, { recursive: true });
 
-  const outRawPath = path.join(outDir, `schedule-${groupNumber}-autumn-${year}.raw.json`);
-
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({
-    userAgent: 'Mozilla/5.0',
-    viewport: { width: 1200, height: 900 },
-  });
-  const page = await context.newPage();
-  page.setDefaultTimeout(120000);
-
-  // 1) Open the public schedule page.
-  await page.goto('https://kai.ru/web/studentu/raspisanie1', { waitUntil: 'networkidle' });
-  // Headless-режим иногда показывает попап/баннер. На странице расписания
-  // КАИ он обычно закрывается кнопкой с id="impp-close-btn".
-  try {
-    const closeBtn = page.locator('#impp-close-btn');
-    if ((await closeBtn.count()) > 0) {
-      await closeBtn.first().click({ timeout: 2000 });
-    }
-  } catch {
-    // ignore
+  const groupId = await resolveGroupId(groupNumber);
+  const scheduleUrl = kaiResourceUrl('schedule', { [KAI_GROUP_ID_PARAM]: groupId });
+  const schedule = await fetchKaiJson(scheduleUrl);
+  const rows = rowsFromSchedule(schedule);
+  if (!rows.length) {
+    throw new Error('KAI вернул пустое расписание');
   }
-  // На всякий случай пробуем Escape (некоторые модалки закрываются так).
-  try {
-    await page.keyboard.press('Escape');
-  } catch {
-    // ignore
-  }
-  await page.waitForTimeout(500);
-
-  // 2) Ввести номер группы (с учётом autocomplete YUI на странице).
-  const groupInputId = '_pubStudentSchedule_WAR_publicStudentSchedule10_group';
-  const groupValue = String(groupNumber);
-
-  await page.evaluate(
-    ([inputId, val]) => {
-      const el = document.getElementById(inputId);
-      if (!el) return;
-      el.focus();
-      el.value = '';
-      el.value = val;
-      // События, которые обычно используют формы для включения submit-кнопок.
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-      el.dispatchEvent(new Event('change', { bubbles: true }));
-      el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: val }));
-    },
-    [groupInputId, groupValue],
-  );
-
-  // Выбираем вариант из выпадающего списка (если он появился).
-  // Часто именно это включает кнопку.
-  await page.waitForTimeout(300);
-  try {
-    const option = page.locator(`li[role="option"][data-text="${groupNumber}"]`).first();
-    if ((await option.count()) > 0) {
-      await option.click({ timeout: 2000 });
-    } else {
-      await page.keyboard.press('ArrowDown');
-      await page.keyboard.press('Enter');
-    }
-  } catch {
-    // ignore
-  }
-  // blur
-  await page.keyboard.press('Tab');
-
-  const lessonsBtn = page.getByRole('button', { name: /Расписание занятий/i });
-
-  // Wait until the submit button is enabled, then click it.
-  // (On the first attempt it can stay disabled until the input event settles.)
-  const lessonsBtnId = '_pubStudentSchedule_WAR_publicStudentSchedule10_schedule';
-  try {
-    await page.waitForFunction(
-      (id) => {
-        const el = document.getElementById(id);
-        return el && !(el.classList.contains('disabled') || el.hasAttribute('disabled'));
-      },
-      lessonsBtnId,
-      { timeout: 30000 },
-    );
-    await page.click('#' + lessonsBtnId);
-  } catch {
-    // Some pages auto-load without needing the click.
-  }
-
-  // 3) Wait until schedule tables are present.
-  // The exact text/layout can vary a bit, so we wait more defensively:
-  // - at least one table containing "Время"
-  // - and at least one table containing "Дисциплина"
-  try {
-    await page.waitForFunction(
-      () => {
-        const tables = Array.from(document.querySelectorAll('table'));
-        const hasTimeTable = tables.some((t) => /Время/i.test(t.innerText || ''));
-        const hasDisciplineTable = tables.some((t) => /Дисциплина/i.test(t.innerText || ''));
-        return hasTimeTable && hasDisciplineTable;
-      },
-      { timeout: 60000 },
-    );
-  } catch (e) {
-    const debug = await page.evaluate(() => {
-      const tables = Array.from(document.querySelectorAll('table'));
-      const timeMatches = tables.filter((t) => /Время/i.test(t.innerText || '')).length;
-      const disciplineMatches = tables.filter((t) => /Дисциплина/i.test(t.innerText || '')).length;
-      return {
-        url: location.href,
-        tableCount: tables.length,
-        timeMatches,
-        disciplineMatches,
-        bodyTextSample: (document.body?.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 500),
-      };
-    });
-
-    const debugScreenshotPath = path.join(outDir, `debug-${groupNumber}-autumn-${year}.png`);
-    const debugHtmlPath = path.join(outDir, `debug-${groupNumber}-autumn-${year}.html`);
-
-    await page.screenshot({ path: debugScreenshotPath, fullPage: true });
-    await fs.writeFile(debugHtmlPath, await page.content(), 'utf-8');
-    console.error('DEBUG_SCHEDULE_NOT_LOADED', debug);
-    console.error('Saved debug files:', debugScreenshotPath, debugHtmlPath);
-
-    throw e;
-  }
-
-  // 4) Extract rows from DOM tables.
-  const rows = await page.evaluate(() => {
-    const tables = Array.from(document.querySelectorAll('table'));
-    const scheduleTables = tables.filter((t) => /Время/.test(t.innerText) && /Дисциплина/.test(t.innerText) && /Вид занятия/.test(t.innerText));
-
-    const extracted = [];
-
-    for (const table of scheduleTables) {
-      const bodyRows = Array.from(table.querySelectorAll('tbody tr'));
-      for (const row of bodyRows) {
-        const tds = Array.from(row.querySelectorAll('td')).map((td) => (td.innerText || '').replace(/\s+/g, ' ').trim());
-        // Expected columns:
-        // 0 Время, 1 Дата(list), 2 Дисциплина, 3 Вид занятия, 4 Здание/Аудитория, 5 Преподаватель, 6 Кафедра
-        if (tds.length < 6) continue;
-
-        const [time, dateCell, discipline, lessonType, room, teacher, department] = tds;
-        const dates = Array.from((dateCell || '').matchAll(/(\d{2}\.\d{2})/g)).map((m) => m[1]);
-
-        // Fallback: sometimes the dates are in a different cell layout; try whole row.
-        if (dates.length === 0) {
-          const rowTextDates = Array.from((row.innerText || '').matchAll(/(\d{2}\.\d{2})/g)).map((m) => m[1]);
-          if (rowTextDates.length > 0) dates.push(...rowTextDates);
-        }
-
-        extracted.push({
-          time: time ?? '',
-          dates,
-          discipline: discipline ?? '',
-          lessonType: lessonType ?? '',
-          room: room ?? '',
-          teacher: teacher ?? '',
-          department: department ?? '',
-        });
-      }
-    }
-
-    return extracted;
-  });
-
-  await browser.close();
 
   const payload = {
-    groupNumber,
-    yearAssumption: year,
+    groupNumber: String(groupNumber),
+    yearAssumption: Number(year),
+    groupId,
     fetchedAt: new Date().toISOString(),
     rows,
   };
 
+  const outRawPath = path.join(outDir, `schedule-${groupNumber}-autumn-${year}.raw.json`);
   await fs.writeFile(outRawPath, JSON.stringify(payload, null, 2), 'utf-8');
-  console.log(`Saved raw schedule: ${outRawPath}`);
+  return { ...payload, outRawPath };
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+async function main() {
+  const groupNumber = getArgValue('--group', '4319');
+  const year = Number(getArgValue('--year', '2026'));
+  const result = await fetchKaiSchedule({ groupNumber, year });
+  console.log(`Saved raw schedule: ${result.outRawPath}`);
+}
 
+if (isMainModule(import.meta.url)) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

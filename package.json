@@ -7,11 +7,12 @@
     "fetch": "node src/fetchKaiSchedule.mjs",
     "build": "node src/buildEvents.mjs",
     "render": "node src/renderSchedulePage.mjs",
+    "start": "node src/serve.mjs",
     "serve": "node src/serve.mjs",
     "restart:serve": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$connections = Get-NetTCPConnection -LocalPort 4173 -State Listen -ErrorAction SilentlyContinue; if ($connections) { $connections | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force } }; npm run serve\"",
     "run": "npm run fetch -- --group 4319 --year 2026 && npm run build -- --group 4319 --year 2026 && npm run render -- --group 4319 --year 2026"
   },
-  "dependencies": {
+  "devDependencies": {
     "playwright": "^1.62.1"
   }
 }

@@ -3,10 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { URL } from 'node:url';
 
-import { refreshSchedule } from './refreshSchedule.mjs';
-
-const HOST = process.env.HOST || '0.0.0.0';
-const PORT = Number(process.env.PORT || 4173);
+const PORT = Number(process.env.PORT) || 4173;
 const DEFAULT_GROUP = process.env.SCHEDULE_GROUP || '4319';
 const DEFAULT_YEAR = Number(process.env.SCHEDULE_YEAR || 2026);
 
@@ -127,6 +124,11 @@ const server = http.createServer(async (req, res) => {
     const reqUrl = new URL(req.url || '/', `http://${req.headers.host}`);
     const pathname = reqUrl.pathname || '/';
 
+    if ((pathname === '/health' || pathname === '/healthz') && req.method === 'GET') {
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
     if (pathname === '/' && req.method === 'GET') {
       const newest = await findNewestScheduleHtml();
       if (!newest) {
@@ -152,6 +154,7 @@ const server = http.createServer(async (req, res) => {
         year: body?.year ?? reqUrl.searchParams.get('year'),
       });
 
+      const { refreshSchedule } = await import('./refreshSchedule.mjs');
       reparseInFlight = refreshSchedule(target)
         .then((result) => sendJson(res, 200, { ok: true, ...result }))
         .catch((e) => sendJson(res, 500, { error: String(e?.message || e) }))
@@ -210,8 +213,8 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, HOST, () => {
-  console.log(`App started: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
-  console.log(`Listening on ${HOST}:${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`App started: http://localhost:${PORT}`);
+  console.log(`Listening on 0.0.0.0:${PORT}`);
   console.log(`Static root: ${outDir}`);
 });

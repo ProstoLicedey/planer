@@ -179,6 +179,9 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
     .workStatus:empty{
       display:none;
     }
+    .workStatusWarn{
+      color: #fbbf24;
+    }
     .menu{
       position: relative;
     }
@@ -635,7 +638,7 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
     <div class="modalOverlay" id="editOverlay" style="display:none;">
       <div class="modal" role="dialog" aria-modal="true" aria-label="Редактирование события">
         <div class="modalHeader">
-          <strong>Редактирование события</strong>
+          <strong id="editTitle">Редактирование события</strong>
           <button type="button" id="editCloseBtn" aria-label="Закрыть">×</button>
         </div>
         <div id="editPrevious" class="previousPair" style="display:none;">
@@ -662,17 +665,17 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
             <input id="editTimeInput" type="time"/>
           </div>
 
-          <div class="field">
+          <div class="field" id="editEndTimeField">
             <label for="editEndTime">До</label>
             <input id="editEndTime" type="time"/>
           </div>
 
-          <div class="field" style="grid-column: 1 / span 2;">
+          <div class="field" id="editDisciplineField" style="grid-column: 1 / span 2;">
             <label for="editDiscipline">Дисциплина</label>
             <input id="editDiscipline" type="text"/>
           </div>
 
-          <div class="field">
+          <div class="field" id="editKindField">
             <label>Тип занятия</label>
             <div style="display:flex;gap:12px;flex-wrap:wrap;">
               <label style="display:flex;align-items:center;gap:6px;color:var(--text);font-size:14px;">
@@ -701,7 +704,7 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
             <input id="editTeacher" type="text"/>
           </div>
 
-          <div class="field" style="grid-column: 1 / span 2;">
+          <div class="field" id="editDepartmentField" style="grid-column: 1 / span 2;">
             <label for="editDepartment">Кафедра</label>
             <input id="editDepartment" type="text"/>
           </div>
@@ -1221,11 +1224,12 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
       };
     }
 
+    function isWorkEvent(ev) {
+      return ev?.department === DEPARTMENT.GENERATED_WORK;
+    }
+
     function isProtectedUserEvent(ev) {
-      return (
-        ev?.department === DEPARTMENT.GENERATED_WORK ||
-        ev?.department === DEPARTMENT.FIXED_IT_SCHOOL
-      );
+      return ev?.department === DEPARTMENT.FIXED_IT_SCHOOL;
     }
 
     // ---- Modal editing ----
@@ -1278,10 +1282,43 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
     }
 
     function getEditStartTime() {
+      const ev = events.find((x) => x.eventId === editingEventId);
+      if (isWorkEvent(ev)) return document.getElementById('editTimeInput')?.value;
       const kind = editOverlay?.querySelector('input[name="editKind"]:checked')?.value || 'pair';
       return kind === 'pair'
         ? document.getElementById('editTimeSelect')?.value
         : document.getElementById('editTimeInput')?.value;
+    }
+
+    function setEditFieldVisible(id, show) {
+      const el = document.getElementById(id);
+      if (el) el.style.display = show ? 'flex' : 'none';
+    }
+
+    function applyEditFormMode(ev) {
+      const title = document.getElementById('editTitle');
+      if (isWorkEvent(ev)) {
+        if (title) title.textContent = 'Редактирование работы';
+        setEditFieldVisible('editDisciplineField', false);
+        setEditFieldVisible('editKindField', false);
+        setEditFieldVisible('editLessonTypeField', false);
+        setEditFieldVisible('editRoomField', false);
+        setEditFieldVisible('editTeacherField', false);
+        setEditFieldVisible('editDepartmentField', false);
+        setEditFieldVisible('editTimeSelectField', false);
+        setEditFieldVisible('editTimeInputField', true);
+        setEditFieldVisible('editEndTimeField', true);
+        if (editDeleteBtn) editDeleteBtn.disabled = false;
+        return;
+      }
+
+      if (title) title.textContent = 'Редактирование события';
+      setEditFieldVisible('editDisciplineField', true);
+      setEditFieldVisible('editKindField', true);
+      setEditFieldVisible('editDepartmentField', true);
+      setEditFieldVisible('editEndTimeField', true);
+      syncEditKindFields();
+      if (editDeleteBtn) editDeleteBtn.disabled = !!isProtectedUserEvent(ev);
     }
 
     function fillPreviousPair(change) {
@@ -1340,7 +1377,9 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
       const endInput = document.getElementById('editEndTime');
 
       dateSel.innerHTML = '';
-      const dateOptions = addDateOptions.length ? addDateOptions : (days || []);
+      const dateOptions = isWorkEvent(ev)
+        ? (days || [])
+        : (addDateOptions.length ? addDateOptions : (days || []));
       for (const iso of dateOptions) {
         const opt = document.createElement('option');
         opt.value = iso;
@@ -1393,9 +1432,7 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
           : '';
       }
 
-      syncEditKindFields();
-
-      if (editDeleteBtn) editDeleteBtn.disabled = !!isProtectedUserEvent(ev);
+      applyEditFormMode(ev);
       showEditOverlay(true);
     }
 
@@ -1411,12 +1448,28 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
       ev.dateLabel = formatDDMM(newIsoDate);
       ev.time = newTime;
       ev.timeHour = parseTimeToHour(newTime);
-      ev.discipline = document.getElementById('editDiscipline').value;
 
       const startM = parseTimeToMinutes(newTime);
       const endM = parseTimeToMinutes(newEndTime);
       const duration = startM !== null && endM !== null ? endM - startM : eventDurationMinutes(ev);
       ev.durationMin = duration > 0 ? duration : 90;
+
+      if (isWorkEvent(ev)) {
+        const stored = workEvents.find((x) => x.eventId === ev.eventId);
+        if (stored) {
+          stored.isoDate = ev.isoDate;
+          stored.dateLabel = ev.dateLabel;
+          stored.time = ev.time;
+          stored.timeHour = ev.timeHour;
+          stored.durationMin = ev.durationMin;
+        }
+        await persistWorkEvents();
+        showEditOverlay(false);
+        renderWeek(currentWeekStartIso);
+        return;
+      }
+
+      ev.discipline = document.getElementById('editDiscipline').value;
 
       const kind = editOverlay.querySelector('input[name="editKind"]:checked')?.value || 'pair';
       const isPair = kind === 'pair';
@@ -1444,8 +1497,17 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
       if (!ev) return;
       if (isProtectedUserEvent(ev)) return;
 
-      const ok = confirm('Удалить событие?');
+      const ok = confirm(isWorkEvent(ev) ? 'Удалить этот слот работы?' : 'Удалить событие?');
       if (!ok) return;
+
+      if (isWorkEvent(ev)) {
+        workEvents = workEvents.filter((x) => x.eventId !== ev.eventId);
+        events = events.filter((x) => x.eventId !== ev.eventId);
+        await persistWorkEvents();
+        showEditOverlay(false);
+        renderWeek(currentWeekStartIso);
+        return;
+      }
 
       if (ev?.source === 'user') {
         userEvents = userEvents.filter((x) => x.eventId !== ev.eventId);
@@ -1813,11 +1875,14 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
             const reparseChange = getReparseChange(e);
             if (reparseChange) card.classList.add('cardChanged');
             const isUser = e.source === 'user';
+            const isWork = isWorkEvent(e);
             const isProtected = isProtectedUserEvent(e);
             const canEdit = !isProtected;
             card.style.cursor = canEdit ? 'pointer' : 'default';
             card.title = isProtected
               ? 'Служебное событие'
+              : isWork
+                ? 'Клик: изменить время работы'
               : reparseChange?.kind === 'changed'
                 ? 'Изменилась после перепарса. Клик: старый формат'
                 : reparseChange?.kind === 'added'
@@ -1874,6 +1939,7 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
 
       const weekTitle = document.getElementById('weekTitle');
       if (weekTitle) weekTitle.textContent = weekLabel(weekStartIso);
+      updateWeekWorkStatus(weekStartIso);
     }
 
     // ---- Search input (discipline) ----
@@ -2260,8 +2326,58 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
     const workCalcStatusEl = document.getElementById('workCalcStatus');
 
     function setWorkCalcStatus(text) {
-      if (!workCalcStatusEl) return;
-      workCalcStatusEl.textContent = String(text || '');
+      const statusEl = document.getElementById('workCalcStatus');
+      if (!statusEl) return;
+      statusEl.textContent = String(text || '');
+    }
+
+    function getTargetWorkHours() {
+      const raw = Number(document.getElementById('workTargetHours')?.value ?? 30);
+      return Number.isFinite(raw) && raw > 0 ? raw : 30;
+    }
+
+    function formatHoursLabel(hours) {
+      const n = Number(hours);
+      if (!Number.isFinite(n)) return '0';
+      const rounded = Math.round(n * 10) / 10;
+      if (Math.abs(rounded - Math.round(rounded)) < 1e-9) return String(Math.round(rounded));
+      return String(rounded);
+    }
+
+    function weekWorkHours(weekStartIso) {
+      if (!weekStartIso) return 0;
+      const days = daysForWeek(weekStartIso);
+      let minutes = 0;
+      for (const ev of events) {
+        if (!isWorkEvent(ev)) continue;
+        if (ev.isoDate < days[0] || ev.isoDate > days[6]) continue;
+        minutes += eventDurationMinutes(ev);
+      }
+      return minutes / 60;
+    }
+
+    function updateWeekWorkStatus(weekStartIso) {
+      const statusEl = document.getElementById('workCalcStatus');
+      if (!statusEl) return;
+      if (!workEvents.length) {
+        statusEl.classList.remove('workStatusWarn');
+        return;
+      }
+      const hours = weekWorkHours(weekStartIso);
+      const target = getTargetWorkHours();
+      if (hours + 0.05 < target) {
+        setWorkCalcStatus(
+          'На этой неделе ' +
+            formatHoursLabel(hours) +
+            ' ч работы — меньше ' +
+            formatHoursLabel(target) +
+            ' ч',
+        );
+        statusEl.classList.add('workStatusWarn');
+      } else {
+        statusEl.classList.remove('workStatusWarn');
+        setWorkCalcStatus('');
+      }
     }
 
     const WORK_SLOT_MINUTES = 30;
@@ -2613,6 +2729,12 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
 
     if (calcWorkBtn) calcWorkBtn.addEventListener('click', () => runGenerateWork());
     if (clearWorkBtn) clearWorkBtn.addEventListener('click', () => runClearWork());
+    const workTargetHoursInput = document.getElementById('workTargetHours');
+    if (workTargetHoursInput) {
+      workTargetHoursInput.addEventListener('change', () => {
+        if (currentWeekStartIso) updateWeekWorkStatus(currentWeekStartIso);
+      });
+    }
   </script>
 </body>
 </html>`;

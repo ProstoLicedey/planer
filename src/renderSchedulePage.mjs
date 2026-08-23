@@ -2331,11 +2331,6 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
       statusEl.textContent = String(text || '');
     }
 
-    function getTargetWorkHours() {
-      const raw = Number(document.getElementById('workTargetHours')?.value ?? 30);
-      return Number.isFinite(raw) && raw > 0 ? raw : 30;
-    }
-
     function formatHoursLabel(hours) {
       const n = Number(hours);
       if (!Number.isFinite(n)) return '0';
@@ -2359,25 +2354,9 @@ export async function renderSchedulePage({ groupNumber = "4319", year = 2026 } =
     function updateWeekWorkStatus(weekStartIso) {
       const statusEl = document.getElementById('workCalcStatus');
       if (!statusEl) return;
-      if (!workEvents.length) {
-        statusEl.classList.remove('workStatusWarn');
-        return;
-      }
+      statusEl.classList.remove('workStatusWarn');
       const hours = weekWorkHours(weekStartIso);
-      const target = getTargetWorkHours();
-      if (hours + 0.05 < target) {
-        setWorkCalcStatus(
-          'На этой неделе ' +
-            formatHoursLabel(hours) +
-            ' ч работы — меньше ' +
-            formatHoursLabel(target) +
-            ' ч',
-        );
-        statusEl.classList.add('workStatusWarn');
-      } else {
-        statusEl.classList.remove('workStatusWarn');
-        setWorkCalcStatus('');
-      }
+      setWorkCalcStatus(formatHoursLabel(hours) + ' ч');
     }
 
     const WORK_SLOT_MINUTES = 30;
